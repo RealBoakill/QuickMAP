@@ -1,58 +1,73 @@
 #!/bin/python3
 
-###################################################################
-#                                                                 #
-# Quick Nmap script - By Boakill                                  #
-# Run basic scan to gather ports, then run -A against open ports. # 
-#                                                                 #
-# Need to add:                                                    #
-# - function for script engine. ie --script smb-enum-*            #
-# - make it cooler                                                #
-#                                                                 #
-###################################################################
-
 import os
 import sys
 import subprocess
 import re
 
+if os.geteuid()==0:
+    if len(sys.argv)!=2:
+        print(f" [!] Syntax error.")
+        sys.exit(" [!] Example: sudo quickmap 192.168.1.1")
+else:
+    sys.exit(" [!] Syntax error: Rerun as root.")
+
+
 target_ip = sys.argv[1]
-ports = []
-nse_ports = [ "21" , "443" ]
+# ports = []
+ports = ["21","445"]
+nse_ports = ["21","135", "445"]
+args = ["-sS", "-T4"]
 
-def nmap_scan():
-    global target_ip
+def port_scan():
     global ports
-    print(" [#] Determining open ports... ")
     pattern = re.compile('[0-9]+(?=/tcp)|[0-9]+(?=/udp)')
-    output = subprocess.getoutput('nmap -sS -T4 -p- ' + target_ip)
+    
+    # Checking if ports varible is empty
+    args.append("-p-")
+
+    print(f" [+] Starting QuickMap")
+    print(f" [+] Determining open ports...")
+    # print(" [!] TEST: nmap "+" ".join(args)+" "+target_ip)
+    output = subprocess.getoutput("nmap "+" ".join(args)+" "+target_ip)
     ports = pattern.findall(output)
-    print(" [#] Ports found: " + ','.join(ports) + "\n")
+    print(f" [+] Ports found: {ports}")
+    args.pop()
 
-    print(" [#] Running full nmap scan now...")
-    output = subprocess.getoutput('nmap -sS -T4 -A -p ' + ','.join(ports) + ' ' + target_ip)
-    print(" [#] Scan complete!")
-    print(output)
+def full_scan():
+    stuff= ["-p "+",".join(ports),"-oA "+target_ip,"-A"]
+    if any(item in nse_ports for item in ports):
+        nse_script(args)
+    n = 0
+    while n < len(stuff):
+        args.append(stuff[n])
+        n = n + 1
 
-def nse_scripts():                                                                                                                                                                                 
-    global target_ip                                                                                                                                                                               
-    global ports                                                                                                                                                                                   
-    print("\n [#] Running NSE Module... ")                                                                                                                                                         
-    if "443" in ports:                                                                                                                                                                             
-        print(" [#] Starting SMB Enumeration...")                                                                                                                                                  
-        output = subprocess.getoutput("nmap -sS -T4 --script smb-enum-* " + target_ip)                                                                                                             
-        print(output)
-        print(" [#] End of SMB Enumeration.")
+    print(f"\n [+] Starting full scan now...")
+    print(f" [+] Args: {args}")
+    output = subprocess.getoutput("nmap "+" ".join(args)+" "+target_ip)
+    print(" [D] nmap "+" ".join(args)+" "+target_ip)
 
+def nse_script(args):
+    script_args = "--script "
     if "21" in ports:
-        print(" [#] Starting FTP Anon script...")
-        output = subprocess.getoutput("nmap -sS -T4 --script ftp-anon " + target_ip)
-        print(output)
-        print(" [#] End of FTP Anon check.")
+        script_args = script_args + "ftp-* "
+    if "445" in ports:
+        script_args = script_args + "smb-enum* "
+        if "135" in ports:
+            script_args = script_args + "msrpc-enum "
 
-print("\n [#] Runing QuickMAP!!!")
-print(" [#] Running SYN Scan against " + target_ip + "\n")
-nmap_scan()
-nse_check = any(item in nse_ports for item in ports)
-if nse_check is True:
-    nse_scripts()
+    print(f"{script_args}")
+    args.append(script_args)
+    print(f"{args}")
+
+def test():
+    print(f"Target: {target_ip}")
+    print(f"Ports found: {ports}")
+    print(f"Aurguments: {args}")
+
+if not ports:
+    port_scan()
+full_scan()
+# test()
+               
